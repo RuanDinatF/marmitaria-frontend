@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,7 +24,7 @@ export default function LoginPage() {
     // Simulate login - replace with actual authentication logic
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    setIsLoading(false)
+    router.push("/dashboard")
   }
 
   return (
