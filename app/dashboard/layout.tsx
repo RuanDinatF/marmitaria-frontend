@@ -9,6 +9,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Toaster } from "@/components/ui/toaster"
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -143,6 +144,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="lg:pl-72 pt-16 lg:pt-0">
         <div className="min-h-screen">{children}</div>
       </main>
+      <Toaster />
     </div>
   )
 }

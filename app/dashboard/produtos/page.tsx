@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,11 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useToast } from "@/components/ui/use-toast"
 import { Plus, Search, Edit, Trash2, ChevronDown, ChevronUp, Package, AlertTriangle, DollarSign, X } from "lucide-react"
+import { produtosApi, mapProdutoToCreateDTO } from "@/lib/api/produtos"
+import { Produto as ProdutoType, ApiError } from "@/lib/api/types"
 
 // Mock data
 const tiposProduto = [
@@ -103,12 +107,38 @@ type Produto = {
   fichaTecnica: ItemFichaTecnica[]
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.message && error.message !== `API Error: ${error.status} ${error.statusText}`) {
+      return error.message;
+    }
+    
+    switch (error.status) {
+      case 400:
+        return 'Dados inválidos. Verifique os campos e tente novamente.';
+      case 404:
+        return 'Produto não encontrado.';
+      case 409:
+        return 'Não é possível excluir este produto pois ele está sendo usado em outras partes do sistema.';
+      case 500:
+        return 'Erro interno do servidor. Tente novamente mais tarde.';
+      default:
+        return 'Erro ao processar requisição.';
+    }
+  }
+  return 'Erro de conexão com o servidor.';
+}
+
 export default function ProdutosPage() {
-  const [produtos, setProdutos] = useState<Produto[]>(produtosIniciais)
+  const { toast } = useToast()
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Produto | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -121,14 +151,48 @@ export default function ProdutosPage() {
   const [fichaTecnica, setFichaTecnica] = useState<ItemFichaTecnica[]>([])
   const [novoInsumo, setNovoInsumo] = useState({ id_insumo: "", quantidade: "" })
 
-  const filteredProdutos = produtos.filter((produto) => produto.nome.toLowerCase().includes(searchTerm.toLowerCase()))
+  // Load produtos from API
+  useEffect(() => {
+    loadProdutos()
+  }, [])
+
+  async function loadProdutos() {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const data = await produtosApi.getAll()
+      setProdutos(data as Produto[])
+    } catch (err) {
+      const errorMessage = getErrorMessage(err)
+      setError(errorMessage)
+      toast({
+        title: "Erro ao carregar produtos",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const filteredProdutos = useMemo(() => {
+    console.log('[FILTER] Recalculando filteredProdutos. Total:', produtos.length, 'Search:', searchTerm, 'RefreshKey:', refreshKey)
+    const filtered = produtos.filter((produto) => produto.nome.toLowerCase().includes(searchTerm.toLowerCase()))
+    console.log('[FILTER] Produtos filtrados:', filtered.length, filtered.map(p => ({ id: p.id, nome: p.nome })))
+    return filtered
+  }, [produtos, searchTerm, refreshKey])
 
   const getStatusProduto = (produto: Produto) => {
     return produto.quantidadeEstoque < produto.estoqueMinimo ? "Estoque Baixo" : "Estoque OK"
   }
 
-  const getTipoProdutoNome = (id: number) => {
-    return tiposProduto.find((tipo) => tipo.id === id)?.nome || "N/A"
+  const getTipoProdutoNome = (produto: Produto) => {
+    // If produto has tipo_produto_nome from API, use it
+    if ('tipo_produto_nome' in produto && produto.tipo_produto_nome) {
+      return produto.tipo_produto_nome
+    }
+    // Fallback to mock data
+    return tiposProduto.find((tipo) => tipo.id === produto.id_tipo_produto)?.nome || "N/A"
   }
 
   const calcularCustoTotal = (ficha: ItemFichaTecnica[]) => {
@@ -183,11 +247,10 @@ export default function ProdutosPage() {
     setFichaTecnica(fichaTecnica.filter((item) => item.id_insumo !== id_insumo))
   }
 
-  const handleSalvarProduto = () => {
+  const handleSalvarProduto = async () => {
     if (!formData.nome || !formData.id_tipo_produto || !formData.preco_venda) return
 
-    const novoProduto: Produto = {
-      id: editingProduct ? editingProduct.id : produtos.length + 1,
+    const produtoData = {
       nome: formData.nome,
       id_tipo_produto: Number.parseInt(formData.id_tipo_produto),
       quantidadeEstoque: Number.parseInt(formData.quantidadeEstoque) || 0,
@@ -197,17 +260,91 @@ export default function ProdutosPage() {
     }
 
     if (editingProduct) {
-      setProdutos(produtos.map((p) => (p.id === editingProduct.id ? novoProduto : p)))
+      // Update existing product via API
+      try {
+        const updateDTO = mapProdutoToCreateDTO(produtoData)
+        await produtosApi.update(editingProduct.id, updateDTO)
+        
+        toast({
+          title: "Produto atualizado com sucesso",
+          description: `${formData.nome} foi atualizado no sistema.`,
+        })
+        
+        setIsCreateDialogOpen(false)
+        await loadProdutos()
+      } catch (err) {
+        const errorMessage = getErrorMessage(err)
+        toast({
+          title: "Erro ao atualizar produto",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
     } else {
-      setProdutos([...produtos, novoProduto])
+      // Create new product via API
+      try {
+        const createDTO = mapProdutoToCreateDTO(produtoData)
+        await produtosApi.create(createDTO)
+        
+        toast({
+          title: "Produto criado com sucesso",
+          description: `${formData.nome} foi adicionado ao sistema.`,
+        })
+        
+        setIsCreateDialogOpen(false)
+        await loadProdutos()
+      } catch (err) {
+        const errorMessage = getErrorMessage(err)
+        toast({
+          title: "Erro ao criar produto",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
     }
-
-    setIsCreateDialogOpen(false)
   }
 
-  const handleDeletarProduto = (id: number) => {
+  const handleDeletarProduto = async (id: number) => {
     if (confirm("Tem certeza que deseja deletar este produto?")) {
-      setProdutos(produtos.filter((p) => p.id !== id))
+      console.log('[DELETE] Iniciando deleção do produto ID:', id)
+      console.log('[DELETE] Produtos antes:', produtos.length, produtos.map(p => p.id))
+      
+      try {
+        await produtosApi.delete(id)
+        console.log('[DELETE] API delete bem-sucedida')
+        
+        // Update local state immediately after successful deletion
+        setProdutos((prevProdutos) => {
+          const novosProdutos = prevProdutos.filter((p) => p.id !== id)
+          console.log('[DELETE] Atualizando estado. Antes:', prevProdutos.length, 'Depois:', novosProdutos.length)
+          console.log('[DELETE] IDs após filtro:', novosProdutos.map(p => p.id))
+          return novosProdutos
+        })
+        
+        // Force re-render
+        setRefreshKey(prev => prev + 1)
+        console.log('[DELETE] Forçando re-render')
+        
+        // Close expanded view if this product was expanded
+        if (expandedProduct === id) {
+          setExpandedProduct(null)
+        }
+        
+        toast({
+          title: "Produto deletado com sucesso",
+          description: "O produto foi removido do sistema.",
+        })
+      } catch (err) {
+        console.error('[DELETE] Erro ao deletar:', err)
+        const errorMessage = getErrorMessage(err)
+        toast({
+          title: "Erro ao deletar produto",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
+    } else {
+      console.log('[DELETE] Deleção cancelada pelo usuário')
     }
   }
 
@@ -436,8 +573,17 @@ export default function ProdutosPage() {
             <Package className="h-5 w-5 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-900">{produtos.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">produtos cadastrados</p>
+            {isLoading ? (
+              <>
+                <Skeleton className="h-9 w-16 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            ) : (
+              <>
+                <div className="text-3xl font-bold text-orange-900">{produtos.length}</div>
+                <p className="text-xs text-muted-foreground mt-1">produtos cadastrados</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -447,10 +593,19 @@ export default function ProdutosPage() {
             <AlertTriangle className="h-5 w-5 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-900">
-              {produtos.filter((p) => p.quantidadeEstoque < p.estoqueMinimo).length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">produtos precisam reposição</p>
+            {isLoading ? (
+              <>
+                <Skeleton className="h-9 w-16 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            ) : (
+              <>
+                <div className="text-3xl font-bold text-orange-900">
+                  {produtos.filter((p) => p.quantidadeEstoque < p.estoqueMinimo).length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">produtos precisam reposição</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -460,10 +615,19 @@ export default function ProdutosPage() {
             <DollarSign className="h-5 w-5 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-900">
-              {formatCurrency(produtos.reduce((acc, p) => acc + p.preco_venda, 0) / produtos.length || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">preço médio de venda</p>
+            {isLoading ? (
+              <>
+                <Skeleton className="h-9 w-20 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            ) : (
+              <>
+                <div className="text-3xl font-bold text-orange-900">
+                  {formatCurrency(produtos.reduce((acc, p) => acc + p.preco_venda, 0) / produtos.length || 0)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">preço médio de venda</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -488,22 +652,31 @@ export default function ProdutosPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border border-orange-200">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-orange-50 hover:bg-orange-50">
-                  <TableHead className="w-[40px]"></TableHead>
-                  <TableHead className="font-semibold">Nome</TableHead>
-                  <TableHead className="font-semibold">Tipo</TableHead>
-                  <TableHead className="font-semibold text-center">Estoque</TableHead>
-                  <TableHead className="font-semibold text-center">Estoque Mín.</TableHead>
-                  <TableHead className="font-semibold text-right">Preço</TableHead>
-                  <TableHead className="font-semibold text-center">Status</TableHead>
-                  <TableHead className="font-semibold text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProdutos.map((produto) => (
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : (
+            <div className="rounded-md border border-orange-200">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-orange-50 hover:bg-orange-50">
+                    <TableHead className="w-[40px]"></TableHead>
+                    <TableHead className="font-semibold">Nome</TableHead>
+                    <TableHead className="font-semibold">Tipo</TableHead>
+                    <TableHead className="font-semibold text-center">Estoque</TableHead>
+                    <TableHead className="font-semibold text-center">Estoque Mín.</TableHead>
+                    <TableHead className="font-semibold text-right">Preço</TableHead>
+                    <TableHead className="font-semibold text-center">Status</TableHead>
+                    <TableHead className="font-semibold text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProdutos.map((produto) => (
                   <>
                     <TableRow key={produto.id} className="hover:bg-orange-50/50">
                       <TableCell>
@@ -521,7 +694,7 @@ export default function ProdutosPage() {
                         </Button>
                       </TableCell>
                       <TableCell className="font-medium">{produto.nome}</TableCell>
-                      <TableCell>{getTipoProdutoNome(produto.id_tipo_produto)}</TableCell>
+                      <TableCell>{getTipoProdutoNome(produto)}</TableCell>
                       <TableCell className="text-center">{produto.quantidadeEstoque}</TableCell>
                       <TableCell className="text-center">{produto.estoqueMinimo}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(produto.preco_venda)}</TableCell>
@@ -610,10 +783,11 @@ export default function ProdutosPage() {
                       </TableRow>
                     )}
                   </>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
