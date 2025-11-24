@@ -1,8 +1,10 @@
 import { apiClient } from './client';
 import { Produto, ProdutoDTO, ProdutoCreateDTO } from './types';
 
+import { ItemFichaTecnica } from './types';
+
 // Data mapping functions
-function mapProdutoDTOToProduto(dto: ProdutoDTO): Produto {
+function mapProdutoDTOToProduto(dto: ProdutoDTO, fichaTecnica: ItemFichaTecnica[] = []): Produto {
   return {
     id: dto.id,
     nome: dto.name,
@@ -11,7 +13,7 @@ function mapProdutoDTOToProduto(dto: ProdutoDTO): Produto {
     quantidadeEstoque: dto.quantidadeEstoque,
     estoqueMinimo: dto.estoqueMinimo,
     preco_venda: dto.precoVenda,
-    fichaTecnica: [], // Empty array - not yet implemented in backend
+    fichaTecnica: fichaTecnica,
   };
 }
 
@@ -30,13 +32,51 @@ export const produtosApi = {
   // GET /products
   async getAll(): Promise<Produto[]> {
     const dtos = await apiClient.request<ProdutoDTO[]>('/products');
-    return dtos.map(mapProdutoDTOToProduto);
+    
+    // Para cada produto, buscar sua ficha técnica
+    const produtosComFicha = await Promise.all(
+      dtos.map(async (dto) => {
+        try {
+          const fichaTecnica = await this.getFichaTecnica(dto.id);
+          return mapProdutoDTOToProduto(dto, fichaTecnica);
+        } catch (err) {
+          // Se falhar ao buscar ficha técnica, retorna produto sem ficha
+          console.warn(`Erro ao buscar ficha técnica do produto ${dto.id}:`, err);
+          return mapProdutoDTOToProduto(dto, []);
+        }
+      })
+    );
+    
+    return produtosComFicha;
   },
 
   // GET /products/{id}
   async getById(id: number): Promise<Produto> {
     const dto = await apiClient.request<ProdutoDTO>(`/products/${id}`);
-    return mapProdutoDTOToProduto(dto);
+    try {
+      const fichaTecnica = await this.getFichaTecnica(id);
+      return mapProdutoDTOToProduto(dto, fichaTecnica);
+    } catch (err) {
+      console.warn(`Erro ao buscar ficha técnica do produto ${id}:`, err);
+      return mapProdutoDTOToProduto(dto, []);
+    }
+  },
+
+  // GET /produtos/{produtoId}/itens-ficha
+  async getFichaTecnica(produtoId: number): Promise<ItemFichaTecnica[]> {
+    const items = await apiClient.request<any[]>(`/produtos/${produtoId}/itens-ficha`);
+    
+    // Mapear para o formato esperado pelo frontend
+    return items.map(item => ({
+      id_insumo: item.insumo.id,
+      quantidade: item.quantidade,
+      insumo: {
+        id: item.insumo.id,
+        nome: item.insumo.nome,
+        custo_unitario: item.insumo.custoUnitario,
+        unidade: item.unidadeMedida.abreviacao,
+      }
+    }));
   },
 
   // POST /products
