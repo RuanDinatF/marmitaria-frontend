@@ -10,26 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
 import { Plus, Search, Edit, Trash2, Package, Scale, DollarSign, CalendarIcon, Tag, X } from "lucide-react"
-import { insumosApi, mapInsumoToCreateDTO } from "@/lib/api/insumos"
-import { type Insumo, ApiError, type TipoInsumoDTO, type UnidadeMedidaDTO } from "@/lib/api/types"
+import { insumosApi, mapInsumoToCreateDTO, type Insumo } from "@/lib/api/insumos"
+import { ApiError, type TipoInsumoDTO, type UnidadeMedidaDTO } from "@/lib/api/types"
+import { tiposInsumoApi } from "@/lib/api/tipos-insumo"
+import { unidadesMedidaApi } from "@/lib/api/unidades-medida"
 import { format } from "date-fns"
-
-// Mock
-const tiposInsumoMock: TipoInsumoDTO[] = [
-  { id: 1, tipo: "Grãos" },
-  { id: 2, tipo: "Óleos" },
-  { id: 3, tipo: "Hortaliças" },
-  { id: 4, tipo: "Carnes" },
-  { id: 5, tipo: "Temperos" },
-]
-
-const unidadesMedidaMock: UnidadeMedidaDTO[] = [
-  { id: 1, nome: "Quilograma", sigla: "kg" },
-  { id: 2, nome: "Grama", sigla: "g" },
-  { id: 3, nome: "Litro", sigla: "L" },
-  { id: 4, nome: "Mililitro", sigla: "ml" },
-  { id: 5, nome: "Unidade", sigla: "un" },
-]
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message
@@ -39,6 +24,8 @@ function getErrorMessage(error: unknown): string {
 export default function InsumosPage() {
   const { toast } = useToast()
   const [insumos, setInsumos] = useState<Insumo[]>([])
+  const [tiposInsumo, setTiposInsumo] = useState<TipoInsumoDTO[]>([])
+  const [unidadesMedida, setUnidadesMedida] = useState<UnidadeMedidaDTO[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -56,6 +43,8 @@ export default function InsumosPage() {
 
   useEffect(() => {
     loadInsumos()
+    loadTiposInsumo()
+    loadUnidadesMedida()
   }, [])
 
   async function loadInsumos() {
@@ -71,6 +60,32 @@ export default function InsumosPage() {
       })
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function loadTiposInsumo() {
+    try {
+      const data = await tiposInsumoApi.getAll()
+      setTiposInsumo(data)
+    } catch (err) {
+      toast({
+        title: "Erro ao carregar tipos de insumo",
+        description: getErrorMessage(err),
+        variant: "destructive",
+      })
+    }
+  }
+
+  async function loadUnidadesMedida() {
+    try {
+      const data = await unidadesMedidaApi.getAll()
+      setUnidadesMedida(data)
+    } catch (err) {
+      toast({
+        title: "Erro ao carregar unidades de medida",
+        description: getErrorMessage(err),
+        variant: "destructive",
+      })
     }
   }
 
@@ -118,27 +133,25 @@ export default function InsumosPage() {
       return
     }
 
-    const insumoData = {
+    const insumoCreateDTO = {
       nome: formData.nome,
       tipoInsumoId: Number(formData.tipoInsumoId),
       quantidadeEstoque: Number(formData.quantidadeEstoque) || 0,
       unidadeMedidaId: Number(formData.unidadeMedidaId),
       custoUnitario: Number(formData.custoUnitario) || 0,
-      dataValidade: formData.dataValidade ? new Date(formData.dataValidade) : null,
+      dataValidade: formData.dataValidade || null,
     }
 
     try {
       if (editingInsumo) {
-        // Update logic (mocked in API)
-        await insumosApi.update(editingInsumo.id, mapInsumoToCreateDTO(insumoData))
+        await insumosApi.update(editingInsumo.id, insumoCreateDTO)
         toast({ title: "Insumo atualizado", description: `${formData.nome} atualizado com sucesso.` })
       } else {
-        // Create logic (mocked in API)
-        await insumosApi.create(mapInsumoToCreateDTO(insumoData))
+        await insumosApi.create(insumoCreateDTO)
         toast({ title: "Insumo criado", description: `${formData.nome} criado com sucesso.` })
       }
       setIsCreateDialogOpen(false)
-      loadInsumos() // Reload (in real app)
+      loadInsumos()
     } catch (err) {
       toast({
         title: "Erro ao salvar",
@@ -149,15 +162,39 @@ export default function InsumosPage() {
   }
 
   const handleDeletarInsumo = async (id: number) => {
-    if (confirm("Tem certeza que deseja excluir este insumo?")) {
-      try {
-        await insumosApi.delete(id)
-        setInsumos(insumos.filter((i) => i.id !== id))
-        toast({ title: "Insumo excluído", description: "O item foi removido do estoque." })
-      } catch (err) {
+    try {
+      // Primeira tentativa: deletar sem forçar
+      await insumosApi.delete(id)
+      setInsumos(insumos.filter((i) => i.id !== id))
+      toast({ title: "Insumo excluído", description: "O item foi removido do estoque." })
+    } catch (err) {
+      const errorMessage = getErrorMessage(err)
+      
+      // Se o erro indica que está em uso em fichas técnicas
+      if (errorMessage.includes("ficha") || errorMessage.includes("técnica")) {
+        // Mostra confirmação para deletar com as fichas técnicas
+        if (confirm(`${errorMessage}\n\nDeseja continuar e remover o insumo de todas as fichas técnicas?`)) {
+          try {
+            // Segunda tentativa: deletar forçando remoção das fichas
+            await insumosApi.deleteWithFichaTecnica(id)
+            setInsumos(insumos.filter((i) => i.id !== id))
+            toast({ 
+              title: "Insumo excluído", 
+              description: "O insumo foi removido do estoque e de todas as fichas técnicas." 
+            })
+          } catch (err2) {
+            toast({
+              title: "Erro ao excluir",
+              description: getErrorMessage(err2),
+              variant: "destructive",
+            })
+          }
+        }
+      } else {
+        // Outro tipo de erro
         toast({
           title: "Erro ao excluir",
-          description: getErrorMessage(err),
+          description: errorMessage,
           variant: "destructive",
         })
       }
@@ -284,7 +321,7 @@ export default function InsumosPage() {
                         <span className={insumo.quantidadeEstoque < 10 ? "text-red-600 font-bold" : ""}>
                           {insumo.quantidadeEstoque}
                         </span>
-                        <span className="text-muted-foreground text-sm">{insumo.unidadeMedida.sigla}</span>
+                        <span className="text-muted-foreground text-sm">{insumo.unidadeMedida.abreviacao}</span>
                       </div>
                     </TableCell>
                     <TableCell>{formatCurrency(insumo.custoUnitario)}</TableCell>
@@ -347,7 +384,7 @@ export default function InsumosPage() {
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {tiposInsumoMock.map((tipo) => (
+                      {tiposInsumo.map((tipo) => (
                         <SelectItem key={tipo.id} value={tipo.id.toString()}>
                           {tipo.tipo}
                         </SelectItem>
@@ -365,9 +402,9 @@ export default function InsumosPage() {
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {unidadesMedidaMock.map((unidade) => (
+                      {unidadesMedida.map((unidade) => (
                         <SelectItem key={unidade.id} value={unidade.id.toString()}>
-                          {unidade.nome} ({unidade.sigla})
+                          {unidade.descricao} ({unidade.abreviacao})
                         </SelectItem>
                       ))}
                     </SelectContent>

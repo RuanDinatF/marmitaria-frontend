@@ -21,6 +21,37 @@ export interface ProdutoCreateDTO {
   precoVenda: number;
 }
 
+// Insumo types
+export interface TipoInsumoDTO {
+  id: number;
+  tipo: string;
+}
+
+export interface UnidadeMedidaDTO {
+  id: number;
+  descricao: string;
+  abreviacao: string;
+}
+
+export interface InsumoDTO {
+  id: number;
+  nome: string;
+  quantidadeEstoque: number;
+  unidadeMedida: UnidadeMedidaDTO;
+  custoUnitario: number;
+  dataValidade: string | null; // ISO date string from backend
+  tipoInsumo: TipoInsumoDTO;
+}
+
+export interface InsumoCreateDTO {
+  nome: string;
+  tipoInsumoId: number;
+  quantidadeEstoque: number;
+  unidadeMedidaId: number;
+  custoUnitario: number;
+  dataValidade: string | null; // ISO date string to backend
+}
+
 // Frontend types (used in components)
 export interface ItemFichaTecnica {
   id_insumo: number;
