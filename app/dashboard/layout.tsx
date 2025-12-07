@@ -16,8 +16,6 @@ import {
   Package,
   Users,
   Wallet,
-  FileText,
-  Settings,
   LogOut,
   Menu,
   ChefHat,
@@ -31,8 +29,6 @@ const menuItems = [
   { icon: ClipboardList, label: "Insumos", href: "/dashboard/insumos" },
   { icon: Users, label: "Clientes", href: "/dashboard/clientes" },
   { icon: Wallet, label: "Caixa", href: "/dashboard/caixa" },
-  { icon: FileText, label: "Relatórios", href: "/dashboard/relatorios" },
-  { icon: Settings, label: "Configurações", href: "/dashboard/configuracoes" },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

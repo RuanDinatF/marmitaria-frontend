@@ -28,9 +28,11 @@ import {
 } from "lucide-react"
 import { vendasApi, clientesApi, mapVendaToCreateDTO } from "@/lib/api/vendas"
 import { produtosApi } from "@/lib/api/produtos"
+import { caixaApi } from "@/lib/api/caixa"
 import { type Venda, type ClienteDTO, type Produto, ApiError } from "@/lib/api/types"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { formatToInputDate, parseInputDate } from "@/lib/utils/date"
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message
@@ -47,11 +49,12 @@ export default function VendasPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [viewingVenda, setViewingVenda] = useState<Venda | null>(null)
+  const [hasCaixaAberto, setHasCaixaAberto] = useState<boolean>(false)
 
   // Form state
   const [formData, setFormData] = useState({
     clienteId: "",
-    dataVenda: new Date().toISOString().split("T")[0],
+    dataVenda: formatToInputDate(new Date()),
     desconto: "",
     valorPago: "",
   })
@@ -66,14 +69,16 @@ export default function VendasPage() {
   async function loadData() {
     try {
       setIsLoading(true)
-      const [vendasData, clientesData, produtosData] = await Promise.all([
+      const [vendasData, clientesData, produtosData, caixaAberto] = await Promise.all([
         vendasApi.getAll(),
         clientesApi.getAll(),
         produtosApi.getAll(),
+        caixaApi.getAberto().catch(() => null),
       ])
       setVendas(vendasData)
       setClientes(clientesData)
       setProdutos(produtosData)
+      setHasCaixaAberto(caixaAberto !== null)
     } catch (err) {
       toast({
         title: "Erro ao carregar dados",
@@ -107,9 +112,17 @@ export default function VendasPage() {
   }, [valorTotalItens, formData.desconto])
 
   const handleOpenCreateDialog = () => {
+    if (!hasCaixaAberto) {
+      toast({
+        title: "Caixa não está aberto",
+        description: "É necessário abrir o caixa antes de realizar vendas. Acesse a página de Caixa para abrir um novo caixa.",
+        variant: "destructive",
+      })
+      return
+    }
     setFormData({
       clienteId: "",
-      dataVenda: new Date().toISOString().split("T")[0],
+      dataVenda: formatToInputDate(new Date()),
       desconto: "",
       valorPago: "",
     })
@@ -154,19 +167,27 @@ export default function VendasPage() {
       valorTotal: valorTotalItens,
       desconto: Number(formData.desconto) || 0,
       valorPago: Number(formData.valorPago) || valorComDesconto,
-      dataVenda: new Date(formData.dataVenda),
+      dataVenda: parseInputDate(formData.dataVenda),
       itens: itensVenda.map((item) => ({ produtoId: item.produtoId, quantidade: item.quantidade })),
     }
 
     try {
-      await vendasApi.create(mapVendaToCreateDTO(vendaData))
+      const createDTO = mapVendaToCreateDTO(vendaData)
+      console.log('[VENDA] Dados sendo enviados:', createDTO)
+      console.log('[VENDA] Data original:', vendaData.dataVenda)
+      console.log('[VENDA] Data no DTO:', createDTO.dataVenda)
+      
+      await vendasApi.create(createDTO)
       toast({ title: "Venda registrada", description: "A venda foi salva com sucesso." })
       setIsCreateDialogOpen(false)
       loadData()
     } catch (err) {
+      console.error('[VENDA] Erro ao criar venda:', err)
+      const errorMessage = getErrorMessage(err)
+      console.log('[VENDA] Mensagem de erro:', errorMessage)
       toast({
-        title: "Erro ao salvar",
-        description: getErrorMessage(err),
+        title: "Erro ao salvar venda",
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -224,11 +245,40 @@ export default function VendasPage() {
           </h1>
           <p className="text-muted-foreground mt-1">Registre e acompanhe todas as vendas realizadas</p>
         </div>
-        <Button onClick={handleOpenCreateDialog} className="bg-orange-600 hover:bg-orange-700">
+        <Button 
+          onClick={handleOpenCreateDialog} 
+          className={hasCaixaAberto ? "bg-orange-600 hover:bg-orange-700" : "bg-gray-400 hover:bg-gray-500"}
+          title={!hasCaixaAberto ? "É necessário abrir o caixa antes de realizar vendas" : ""}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Nova Venda
         </Button>
       </div>
+
+      {/* Alerta de caixa fechado */}
+      {!hasCaixaAberto && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-red-800">Caixa não está aberto</h3>
+                <p className="text-sm text-red-700 mt-1">
+                  É necessário abrir o caixa antes de realizar vendas. Acesse a página de{" "}
+                  <a href="/dashboard/caixa" className="font-semibold underline hover:text-red-900">
+                    Caixa
+                  </a>{" "}
+                  para abrir um novo caixa.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cards de Resumo */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -446,7 +496,7 @@ export default function VendasPage() {
                             <SelectContent>
                               {produtos.map((produto) => (
                                 <SelectItem key={produto.id} value={produto.id.toString()}>
-                                  {produto.nome} - {formatCurrency(produto.preco_venda)}
+                                  {produto.nome}
                                 </SelectItem>
                               ))}
                             </SelectContent>

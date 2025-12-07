@@ -6,8 +6,10 @@ export interface TipoProdutoDTO {
 
 export interface ProdutoDTO {
   id: number
-  name: string
-  tipoProdutoDTO: TipoProdutoDTO
+  nome: string
+  tipoProdutoId?: number
+  tipoProdutoNome?: string
+  tipoProdutoDTO?: TipoProdutoDTO
   quantidadeEstoque: number
   estoqueMinimo: number
   precoVenda: number
@@ -23,6 +25,7 @@ export interface ProdutoCreateDTO {
 
 // Frontend types (used in components)
 export interface ItemFichaTecnica {
+  id?: number // ID do item da ficha técnica (não do insumo)
   id_insumo: number
   quantidade: number
   insumo: {
@@ -52,8 +55,8 @@ export interface TipoInsumoDTO {
 
 export interface UnidadeMedidaDTO {
   id: number
-  nome: string
-  sigla: string
+  descricao: string
+  abreviacao: string
 }
 
 export interface InsumoDTO {
@@ -96,9 +99,17 @@ export interface ClienteDTO {
   limiteCredito: boolean
 }
 
+export interface ClienteCreateDTO {
+  nome: string
+  endereco: string
+  telefone: string
+  saldo: number
+  limiteCredito: boolean
+}
+
 export interface ItemVendaDTO {
   id: number
-  produto: ProdutoDTO
+  produto?: ProdutoDTO
   quantidade: number
 }
 
@@ -136,6 +147,56 @@ export interface Venda {
   valorPago: number
   dataVenda: Date
   itens: ItemVenda[]
+}
+
+// Backend API types for Caixa
+export interface MovimentacaoCaixaDTO {
+  id: number
+  tipo: 'ENTRADA' | 'SAIDA'
+  descricao: string
+  valor: number
+  dataHora: string
+}
+
+export interface CaixaResponseDTO {
+  id: number
+  valorInicial: number
+  valorFinal: number | null
+  dataAbertura: string
+  dataFechamento: string | null
+  status: 'ABERTO' | 'FECHADO'
+  movimentacoes: MovimentacaoCaixaDTO[]
+}
+
+export interface CaixaRequestDTO {
+  valorInicial: number
+  valorFinal?: number | null
+}
+
+export interface MovimentacaoCaixaCreateDTO {
+  caixaId: number
+  tipo: 'ENTRADA' | 'SAIDA'
+  descricao: string
+  valor: number
+}
+
+// Frontend types for Caixa
+export interface Movimentacao {
+  id: number
+  tipo: 'ENTRADA' | 'SAIDA'
+  descricao: string
+  valor: number
+  dataHora: Date
+}
+
+export interface Caixa {
+  id: number
+  saldoInicial: number
+  saldoFinal: number | null
+  dataAbertura: Date
+  dataFechamento: Date | null
+  status: 'ABERTO' | 'FECHADO'
+  movimentacoes: Movimentacao[]
 }
 
 // Error handling

@@ -7,9 +7,9 @@ import { ItemFichaTecnica } from './types';
 function mapProdutoDTOToProduto(dto: ProdutoDTO, fichaTecnica: ItemFichaTecnica[] = []): Produto {
   return {
     id: dto.id,
-    nome: dto.name,
-    id_tipo_produto: dto.tipoProdutoDTO.id,
-    tipo_produto_nome: dto.tipoProdutoDTO.tipo,
+    nome: dto.nome,
+    id_tipo_produto: dto.tipoProdutoDTO?.id || dto.tipoProdutoId || 0,
+    tipo_produto_nome: dto.tipoProdutoDTO?.tipo || dto.tipoProdutoNome || 'Sem tipo',
     quantidadeEstoque: dto.quantidadeEstoque,
     estoqueMinimo: dto.estoqueMinimo,
     preco_venda: dto.precoVenda,
@@ -68,6 +68,7 @@ export const produtosApi = {
     
     // Mapear para o formato esperado pelo frontend
     return items.map(item => ({
+      id: item.id, // ID do item da ficha técnica
       id_insumo: item.insumo.id,
       quantidade: item.quantidade,
       insumo: {
@@ -86,6 +87,24 @@ export const produtosApi = {
       body: JSON.stringify(data),
     });
     return mapProdutoDTOToProduto(dto);
+  },
+
+  // POST /produtos/{produtoId}/itens-ficha
+  async addItemFichaTecnica(produtoId: number, item: { insumoId: number; quantidade: number; unidadeMedidaId: number }): Promise<void> {
+    await apiClient.request(`/produtos/${produtoId}/itens-ficha`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...item,
+        produtoId: produtoId, // Incluir produtoId no body para validação
+      }),
+    });
+  },
+
+  // DELETE /itens-ficha/{id}
+  async deleteItemFichaTecnica(itemId: number): Promise<void> {
+    await apiClient.request(`/itens-ficha/${itemId}`, {
+      method: 'DELETE',
+    });
   },
 
   // PUT /products/{id}

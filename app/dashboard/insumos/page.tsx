@@ -15,6 +15,7 @@ import { ApiError, type TipoInsumoDTO, type UnidadeMedidaDTO } from "@/lib/api/t
 import { tiposInsumoApi } from "@/lib/api/tipos-insumo"
 import { unidadesMedidaApi } from "@/lib/api/unidades-medida"
 import { format } from "date-fns"
+import { formatToInputDate, parseInputDate } from "@/lib/utils/date"
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message
@@ -118,7 +119,7 @@ export default function InsumosPage() {
       quantidadeEstoque: insumo.quantidadeEstoque.toString(),
       unidadeMedidaId: insumo.unidadeMedida.id.toString(),
       custoUnitario: insumo.custoUnitario.toString(),
-      dataValidade: insumo.dataValidade ? format(insumo.dataValidade, "yyyy-MM-dd") : "",
+      dataValidade: insumo.dataValidade ? formatToInputDate(insumo.dataValidade) : "",
     })
     setIsCreateDialogOpen(true)
   }

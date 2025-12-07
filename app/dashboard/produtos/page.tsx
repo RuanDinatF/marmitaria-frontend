@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,78 +12,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { Plus, Search, Edit, Trash2, ChevronDown, ChevronUp, Package, AlertTriangle, DollarSign, X } from "lucide-react"
 import { produtosApi, mapProdutoToCreateDTO } from "@/lib/api/produtos"
+import { insumosApi, type Insumo } from "@/lib/api/insumos"
 import { Produto as ProdutoType, ApiError } from "@/lib/api/types"
 
-// Mock data
+// Mock data - Sincronizado com o banco de dados
 const tiposProduto = [
-  { id: 1, nome: "Marmita Executiva" },
-  { id: 2, nome: "Marmita Fitness" },
-  { id: 3, nome: "Marmita Vegetariana" },
-  { id: 4, nome: "Marmita Kids" },
-]
-
-const unidadesMedida = [
-  { id: 1, nome: "Quilograma", abreviacao: "kg" },
-  { id: 2, nome: "Grama", abreviacao: "g" },
-  { id: 3, nome: "Litro", abreviacao: "L" },
-  { id: 4, nome: "Mililitro", abreviacao: "ml" },
-  { id: 5, nome: "Unidade", abreviacao: "un" },
-]
-
-const insumosDisponiveis = [
-  { id: 1, nome: "Arroz Branco", custo_unitario: 6.5, unidade: "kg" },
-  { id: 2, nome: "Feijão Preto", custo_unitario: 8.0, unidade: "kg" },
-  { id: 3, nome: "Frango", custo_unitario: 12.0, unidade: "kg" },
-  { id: 4, nome: "Carne Bovina", custo_unitario: 35.0, unidade: "kg" },
-  { id: 5, nome: "Tomate", custo_unitario: 4.5, unidade: "kg" },
-  { id: 6, nome: "Alface", custo_unitario: 3.0, unidade: "kg" },
-  { id: 7, nome: "Cenoura", custo_unitario: 3.5, unidade: "kg" },
-  { id: 8, nome: "Azeite", custo_unitario: 25.0, unidade: "L" },
-]
-
-const produtosIniciais = [
-  {
-    id: 1,
-    nome: "Marmita Executiva - Frango",
-    id_tipo_produto: 1,
-    quantidadeEstoque: 15,
-    estoqueMinimo: 10,
-    preco_venda: 18.5,
-    fichaTecnica: [
-      { id_insumo: 1, quantidade: 0.15, insumo: insumosDisponiveis[0] },
-      { id_insumo: 2, quantidade: 0.1, insumo: insumosDisponiveis[1] },
-      { id_insumo: 3, quantidade: 0.2, insumo: insumosDisponiveis[2] },
-      { id_insumo: 5, quantidade: 0.05, insumo: insumosDisponiveis[4] },
-    ],
-  },
-  {
-    id: 2,
-    nome: "Marmita Fitness - Carne",
-    id_tipo_produto: 2,
-    quantidadeEstoque: 8,
-    estoqueMinimo: 10,
-    preco_venda: 22.0,
-    fichaTecnica: [
-      { id_insumo: 1, quantidade: 0.12, insumo: insumosDisponiveis[0] },
-      { id_insumo: 4, quantidade: 0.15, insumo: insumosDisponiveis[3] },
-      { id_insumo: 6, quantidade: 0.08, insumo: insumosDisponiveis[5] },
-      { id_insumo: 7, quantidade: 0.06, insumo: insumosDisponiveis[6] },
-    ],
-  },
-  {
-    id: 3,
-    nome: "Marmita Vegetariana",
-    id_tipo_produto: 3,
-    quantidadeEstoque: 12,
-    estoqueMinimo: 8,
-    preco_venda: 16.0,
-    fichaTecnica: [
-      { id_insumo: 1, quantidade: 0.15, insumo: insumosDisponiveis[0] },
-      { id_insumo: 2, quantidade: 0.12, insumo: insumosDisponiveis[1] },
-      { id_insumo: 5, quantidade: 0.1, insumo: insumosDisponiveis[4] },
-      { id_insumo: 6, quantidade: 0.1, insumo: insumosDisponiveis[5] },
-    ],
-  },
+  { id: 1, nome: "Marmita" },
+  { id: 2, nome: "Bebida" },
+  { id: 3, nome: "Sobremesa" },
 ]
 
 type ItemFichaTecnica = {
@@ -132,6 +68,7 @@ function getErrorMessage(error: unknown): string {
 export default function ProdutosPage() {
   const { toast } = useToast()
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [insumosDisponiveis, setInsumosDisponiveis] = useState<Insumo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
@@ -154,6 +91,7 @@ export default function ProdutosPage() {
   // Load produtos from API
   useEffect(() => {
     loadProdutos()
+    loadInsumos()
   }, [])
 
   async function loadProdutos() {
@@ -175,9 +113,22 @@ export default function ProdutosPage() {
     }
   }
 
+  async function loadInsumos() {
+    try {
+      const data = await insumosApi.getAll()
+      setInsumosDisponiveis(data)
+    } catch (err) {
+      toast({
+        title: "Erro ao carregar insumos",
+        description: getErrorMessage(err),
+        variant: "destructive",
+      })
+    }
+  }
+
   const filteredProdutos = useMemo(() => {
     console.log('[FILTER] Recalculando filteredProdutos. Total:', produtos.length, 'Search:', searchTerm, 'RefreshKey:', refreshKey)
-    const filtered = produtos.filter((produto) => produto.nome.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filtered = produtos.filter((produto) => produto?.nome?.toLowerCase().includes(searchTerm.toLowerCase()))
     console.log('[FILTER] Produtos filtrados:', filtered.length, filtered.map(p => ({ id: p.id, nome: p.nome })))
     return filtered
   }, [produtos, searchTerm, refreshKey])
@@ -236,7 +187,12 @@ export default function ProdutosPage() {
     const novoItem: ItemFichaTecnica = {
       id_insumo: insumo.id,
       quantidade: Number.parseFloat(novoInsumo.quantidade),
-      insumo: insumo,
+      insumo: {
+        id: insumo.id,
+        nome: insumo.nome,
+        custo_unitario: insumo.custoUnitario,
+        unidade: insumo.unidadeMedida.abreviacao,
+      },
     }
 
     setFichaTecnica([...fichaTecnica, novoItem])
@@ -265,6 +221,33 @@ export default function ProdutosPage() {
         const updateDTO = mapProdutoToCreateDTO(produtoData)
         await produtosApi.update(editingProduct.id, updateDTO)
         
+        // Atualizar ficha técnica
+        // Primeiro, buscar a ficha técnica atual
+        const fichaAtual = await produtosApi.getFichaTecnica(editingProduct.id)
+        
+        // Remover itens que não estão mais na ficha
+        for (const itemAtual of fichaAtual) {
+          const aindaExiste = fichaTecnica.some(item => item.id_insumo === itemAtual.id_insumo)
+          if (!aindaExiste && itemAtual.id) {
+            await produtosApi.deleteItemFichaTecnica(itemAtual.id)
+          }
+        }
+        
+        // Adicionar novos itens
+        for (const item of fichaTecnica) {
+          const jaExiste = fichaAtual.some(itemAtual => itemAtual.id_insumo === item.id_insumo)
+          if (!jaExiste) {
+            const insumo = insumosDisponiveis.find(i => i.id === item.id_insumo)
+            if (insumo) {
+              await produtosApi.addItemFichaTecnica(editingProduct.id, {
+                insumoId: item.id_insumo,
+                quantidade: item.quantidade,
+                unidadeMedidaId: insumo.unidadeMedida.id,
+              })
+            }
+          }
+        }
+        
         toast({
           title: "Produto atualizado com sucesso",
           description: `${formData.nome} foi atualizado no sistema.`,
@@ -284,7 +267,22 @@ export default function ProdutosPage() {
       // Create new product via API
       try {
         const createDTO = mapProdutoToCreateDTO(produtoData)
-        await produtosApi.create(createDTO)
+        const novoProduto = await produtosApi.create(createDTO)
+        
+        // Salvar ficha técnica se houver itens
+        if (fichaTecnica.length > 0) {
+          for (const item of fichaTecnica) {
+            // Buscar o insumo completo para pegar a unidade de medida
+            const insumo = insumosDisponiveis.find(i => i.id === item.id_insumo)
+            if (insumo) {
+              await produtosApi.addItemFichaTecnica(novoProduto.id, {
+                insumoId: item.id_insumo,
+                quantidade: item.quantidade,
+                unidadeMedidaId: insumo.unidadeMedida.id,
+              })
+            }
+          }
+        }
         
         toast({
           title: "Produto criado com sucesso",
@@ -523,7 +521,7 @@ export default function ProdutosPage() {
                               .filter((insumo) => !fichaTecnica.some((item) => item.id_insumo === insumo.id))
                               .map((insumo) => (
                                 <SelectItem key={insumo.id} value={insumo.id.toString()}>
-                                  {insumo.nome} ({formatCurrency(insumo.custo_unitario)}/{insumo.unidade})
+                                  {insumo.nome} ({formatCurrency(insumo.custoUnitario)}/{insumo.unidadeMedida.abreviacao})
                                 </SelectItem>
                               ))}
                           </SelectContent>
@@ -676,114 +674,122 @@ export default function ProdutosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProdutos.map((produto) => (
-                  <>
-                    <TableRow key={produto.id} className="hover:bg-orange-50/50">
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setExpandedProduct(expandedProduct === produto.id ? null : produto.id)}
-                          className="h-8 w-8"
-                        >
-                          {expandedProduct === produto.id ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="font-medium">{produto.nome}</TableCell>
-                      <TableCell>{getTipoProdutoNome(produto)}</TableCell>
-                      <TableCell className="text-center">{produto.quantidadeEstoque}</TableCell>
-                      <TableCell className="text-center">{produto.estoqueMinimo}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(produto.preco_venda)}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant={getStatusProduto(produto) === "Estoque OK" ? "default" : "destructive"}
-                          className={
-                            getStatusProduto(produto) === "Estoque OK"
-                              ? "bg-green-100 text-green-800 hover:bg-green-100"
-                              : ""
-                          }
-                        >
-                          {getStatusProduto(produto)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEditDialog(produto)}
-                            className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeletarProduto(produto.id)}
-                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                  {filteredProdutos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        {error ? error : "Nenhum produto encontrado."}
                       </TableCell>
                     </TableRow>
-                    {expandedProduct === produto.id && (
-                      <TableRow>
-                        <TableCell colSpan={8} className="bg-orange-50/30">
-                          <div className="p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-semibold text-orange-900">Ficha Técnica</h4>
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">Custo Total: </span>
-                                <span className="font-bold text-orange-900">
-                                  {formatCurrency(calcularCustoTotal(produto.fichaTecnica))}
-                                </span>
-                                <span className="text-muted-foreground ml-4">Margem: </span>
-                                <span className="font-bold text-green-700">
-                                  {(
-                                    ((produto.preco_venda - calcularCustoTotal(produto.fichaTecnica)) /
-                                      produto.preco_venda) *
-                                    100
-                                  ).toFixed(1)}
-                                  %
-                                </span>
-                              </div>
+                  ) : (
+                    filteredProdutos.map((produto) => (
+                      <React.Fragment key={produto.id}>
+                        <TableRow className="hover:bg-orange-50/50">
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setExpandedProduct(expandedProduct === produto.id ? null : produto.id)}
+                              className="h-8 w-8"
+                            >
+                              {expandedProduct === produto.id ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TableCell>
+                          <TableCell className="font-medium">{produto.nome}</TableCell>
+                          <TableCell>{getTipoProdutoNome(produto)}</TableCell>
+                          <TableCell className="text-center">{produto.quantidadeEstoque}</TableCell>
+                          <TableCell className="text-center">{produto.estoqueMinimo}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(produto.preco_venda)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge
+                              variant={getStatusProduto(produto) === "Estoque OK" ? "default" : "destructive"}
+                              className={
+                                getStatusProduto(produto) === "Estoque OK"
+                                  ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                  : ""
+                              }
+                            >
+                              {getStatusProduto(produto)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenEditDialog(produto)}
+                                className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeletarProduto(produto.id)}
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
-                            {produto.fichaTecnica.length > 0 ? (
-                              <div className="grid gap-2 md:grid-cols-2">
-                                {produto.fichaTecnica.map((item) => (
-                                  <div
-                                    key={item.id_insumo}
-                                    className="flex items-center justify-between p-3 rounded-lg bg-white border border-orange-200"
-                                  >
-                                    <div>
-                                      <p className="font-medium text-sm">{item.insumo.nome}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {item.quantidade} {item.insumo.unidade} ×{" "}
-                                        {formatCurrency(item.insumo.custo_unitario)}
-                                      </p>
-                                    </div>
-                                    <span className="font-semibold text-orange-900">
-                                      {formatCurrency(item.quantidade * item.insumo.custo_unitario)}
+                          </TableCell>
+                        </TableRow>
+                        {expandedProduct === produto.id && (
+                          <TableRow>
+                            <TableCell colSpan={8} className="bg-orange-50/30">
+                              <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-orange-900">Ficha Técnica</h4>
+                                  <div className="text-sm">
+                                    <span className="text-muted-foreground">Custo Total: </span>
+                                    <span className="font-bold text-orange-900">
+                                      {formatCurrency(calcularCustoTotal(produto.fichaTecnica))}
+                                    </span>
+                                    <span className="text-muted-foreground ml-4">Margem: </span>
+                                    <span className="font-bold text-green-700">
+                                      {(
+                                        ((produto.preco_venda - calcularCustoTotal(produto.fichaTecnica)) /
+                                          produto.preco_venda) *
+                                        100
+                                      ).toFixed(1)}
+                                      %
                                     </span>
                                   </div>
-                                ))}
+                                </div>
+                                {produto.fichaTecnica.length > 0 ? (
+                                  <div className="grid gap-2 md:grid-cols-2">
+                                    {produto.fichaTecnica.map((item) => (
+                                      <div
+                                        key={item.id_insumo}
+                                        className="flex items-center justify-between p-3 rounded-lg bg-white border border-orange-200"
+                                      >
+                                        <div>
+                                          <p className="font-medium text-sm">{item.insumo.nome}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {item.quantidade} {item.insumo.unidade} ×{" "}
+                                            {formatCurrency(item.insumo.custo_unitario)}
+                                          </p>
+                                        </div>
+                                        <span className="font-semibold text-orange-900">
+                                          {formatCurrency(item.quantidade * item.insumo.custo_unitario)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground text-center py-4">
+                                    Nenhum insumo cadastrado na ficha técnica
+                                  </p>
+                                )}
                               </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground text-center py-4">
-                                Nenhum insumo cadastrado na ficha técnica
-                              </p>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
-                  ))}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

@@ -30,13 +30,32 @@ class ApiClient {
       let errorMessage = response.statusText;
       try {
         const errorText = await response.text();
+        console.log('[API Client] Error response text:', errorText);
         if (errorText) {
-          errorMessage = errorText;
+          // Try to parse as JSON first (backend returns ErrorResponse)
+          try {
+            const errorJson = JSON.parse(errorText);
+            console.log('[API Client] Parsed error JSON:', errorJson);
+            // Backend returns { status: number, message: string }
+            if (errorJson.message) {
+              errorMessage = errorJson.message;
+            } else if (errorJson.error) {
+              errorMessage = errorJson.error;
+            } else {
+              errorMessage = errorText;
+            }
+          } catch (parseError) {
+            // If not JSON, use the text as is
+            console.log('[API Client] Not JSON, using text as is');
+            errorMessage = errorText;
+          }
         }
       } catch (e) {
         // If we can't read the body, use statusText
+        console.error('[API Client] Error reading response body:', e);
       }
       
+      console.log('[API Client] Final error message:', errorMessage);
       throw new ApiError(response.status, response.statusText, errorMessage);
     }
 

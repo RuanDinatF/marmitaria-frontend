@@ -23,6 +23,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build the application
+# NEXT_PUBLIC_API_URL can be overridden at build time via --build-arg
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm run build
 

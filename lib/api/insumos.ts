@@ -21,25 +21,39 @@ export interface Insumo {
 
 // Data mapping functions
 function mapInsumoDTOToInsumo(dto: InsumoDTO): Insumo {
+  // Parse date without timezone issues
+  const parseLocalDate = (dateStr: string): Date => {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+  
   return {
     id: dto.id,
     nome: dto.nome,
     quantidadeEstoque: dto.quantidadeEstoque,
     unidadeMedida: dto.unidadeMedida,
     custoUnitario: dto.custoUnitario,
-    dataValidade: dto.dataValidade ? new Date(dto.dataValidade) : null,
+    dataValidade: dto.dataValidade ? parseLocalDate(dto.dataValidade) : null,
     tipoInsumo: dto.tipoInsumo,
   };
 }
 
 export function mapInsumoToCreateDTO(insumo: Partial<Insumo>): InsumoCreateDTO {
+  // Helper to convert Date to yyyy-MM-dd without timezone issues
+  const toLocalDateString = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
   return {
     nome: insumo.nome!,
     tipoInsumoId: insumo.tipoInsumo!.id,
     quantidadeEstoque: insumo.quantidadeEstoque || 0,
     unidadeMedidaId: insumo.unidadeMedida!.id,
     custoUnitario: insumo.custoUnitario || 0,
-    dataValidade: insumo.dataValidade ? insumo.dataValidade.toISOString().split('T')[0] : null,
+    dataValidade: insumo.dataValidade ? toLocalDateString(insumo.dataValidade) : null,
   };
 }
 
